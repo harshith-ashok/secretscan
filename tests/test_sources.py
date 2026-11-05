@@ -44,7 +44,10 @@ def test_worktree_skips_binary_git_and_big_files(tmp_path):
     (tmp_path / ".git" / "config").write_text("ignored")
     (tmp_path / "big.txt").write_text("x" * 200)
     chunks = list(iter_worktree(tmp_path, max_bytes=100))
-    assert [(c.path, c.line, c.text) for c in chunks] == [("a.txt", 1, "hello"), ("a.txt", 2, "world")]
+    assert [(c.path, c.line, c.text) for c in chunks] == [
+        ("a.txt", 1, "hello"),
+        ("a.txt", 2, "world"),
+    ]
 
 
 def test_staged_only_sees_staged_additions(repo):

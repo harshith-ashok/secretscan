@@ -27,7 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     mode = s.add_mutually_exclusive_group()
     mode.add_argument("--staged", action="store_true", help="scan staged changes only")
     mode.add_argument("--history", nargs="*", metavar="REV", default=None,
-                      help="scan every commit (optionally limited to revisions, e.g. main~20..HEAD)")
+                      help="scan every commit (optionally limited to revisions, "
+                           "e.g. main~20..HEAD)")
     s.add_argument("--entropy", type=float, metavar="BITS", default=None,
                    help="also flag random-looking tokens at or above this entropy (try 4.5)")
     s.add_argument("--baseline", type=Path, help="ignore findings recorded in this baseline")

@@ -82,7 +82,9 @@ def parse_diff(lines: Iterable[str]) -> Iterator[Chunk]:
 
 
 def iter_staged(repo: Path) -> Iterator[Chunk]:
-    yield from parse_diff(_git_lines(repo, "diff", "--cached", "-U0", "--no-color", "--no-ext-diff"))
+    yield from parse_diff(
+        _git_lines(repo, "diff", "--cached", "-U0", "--no-color", "--no-ext-diff")
+    )
 
 
 def iter_history(repo: Path, revs: tuple[str, ...] = ("--all",)) -> Iterator[Chunk]:
