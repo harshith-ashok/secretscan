@@ -7,7 +7,7 @@ name = "secretscan"
 version = "0.1.0"
 description = "Find leaked secrets in files, staged changes and git history"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = []
 
