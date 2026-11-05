@@ -1,0 +1,7 @@
+- id: secretscan
+  name: secretscan
+  description: Block commits that contain secrets
+  entry: secretscan scan --staged
+  language: python
+  pass_filenames: false
+  always_run: true

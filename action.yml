@@ -1,0 +1,25 @@
+name: secretscan
+description: Scan a repository (including git history) for leaked secrets
+inputs:
+  path:
+    description: Path to scan
+    default: "."
+  history:
+    description: Also scan full git history (needs fetch-depth 0)
+    default: "true"
+  args:
+    description: Extra arguments, e.g. "--baseline .secretscan-baseline.json --entropy 4.5"
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    - run: pip install secretscan
+      shell: bash
+    - shell: bash
+      run: |
+        flags=""
+        if [ "${{ inputs.history }}" = "true" ]; then flags="--history"; fi
+        secretscan scan "${{ inputs.path }}" $flags ${{ inputs.args }}
