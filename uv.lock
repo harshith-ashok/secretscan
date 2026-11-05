@@ -904,9 +904,6 @@ wheels = [
 name = "secretscan"
 version = "0.1.0"
 source = { editable = "." }
-dependencies = [
-    { name = "pytest" },
-]
 
 [package.optional-dependencies]
 dev = [
@@ -924,7 +921,6 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'" },
     { name = "hypothesis", marker = "extra == 'dev'" },
     { name = "mypy", marker = "extra == 'dev'" },
-    { name = "pytest", specifier = ">=9.2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
