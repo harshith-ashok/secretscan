@@ -1,133 +1,105 @@
 <h3 align="center">secretscan</h3>
 
-<p align="center">A staged design for finding leaked secrets in files, staged changes and git history</p>
+<p align="center">Find leaked secrets in files, staged changes and git history. Zero dependencies.</p>
 
 ---
 
-## Abstract
-
-Credentials committed to source control remain exposed after the offending line is deleted, because the line persists in history. `secretscan` is a Python library that separates *where text comes from* (sources), *what counts as a secret* (rules and entropy), and *what is reported* (findings). The three stages communicate only through two small immutable types, `Chunk` and `Finding`. This document describes the current design, the detection method, the evaluation done so far, and the known limitations.
-
-## 1. Architecture
-
-The core design rule is that three independent stages communicate only through small data types.
+Git never forgets: deleting a secret in a later commit leaves it in history. `secretscan` checks all three places a secret can live, and every behaviour below is backed by a test.
 
 ![architecture](figs/architecture.png)
 
-| Stage | Module | Responsibility |
-|---|---|---|
-| Sources | [sources.py](src/secretscan/sources.py) | Turn the outside world (disk, git) into `Chunk`s |
-| Engine | [engine.py](src/secretscan/engine.py), [rules.py](src/secretscan/rules.py), [entropy.py](src/secretscan/entropy.py) | Turn `Chunk`s into `Finding`s |
-| Data types | [models.py](src/secretscan/models.py) | `Chunk` (one line plus origin) and `Finding` (a suspected secret) |
+## Install
 
-All stages are lazy generators, so memory use does not grow with repository size.
+Requires Python 3.11+ and `git` on `PATH`.
 
-### 1.1 Data types
+```bash
+pip install -e ".[dev]"
+```
 
-- **`Chunk(text, path, line, commit=None)`**: a single line and its provenance. `commit` is set only for history scans.
-- **`Finding(rule_id, description, path, line, secret, commit)`**: a suspected secret. Two properties are designed to avoid creating a second leak:
-  - `secret` is excluded from `repr()`.
-  - `redacted` exposes only the first 4 and last 2 characters (fully masked if 8 characters or fewer).
-  - `fingerprint` is the first 16 hex characters of SHA-256 over `(rule_id, path, secret)`, stable when lines shift.
+## Usage
 
-## 2. Detection method
+```bash
+secretscan scan .                          # files on disk
+secretscan scan . --staged                 # staged changes only
+secretscan scan . --history                # every commit
+secretscan scan . --history main~20..HEAD  # a revision range
+secretscan scan . --entropy 4.5            # also flag random-looking tokens
+secretscan scan . --format sarif --output results.sarif
+secretscan install-hook .                  # block commits that add secrets
+```
+
+| Exit code | Meaning                                    |
+| --------- | ------------------------------------------ |
+| `0`       | clean                                      |
+| `1`       | findings reported                          |
+| `2`       | error (bad path, not a git repo, git fail) |
+
+Other flags: `--format text|json|sarif`, `--baseline FILE`, `--write-baseline FILE`.
+
+## Tests
+
+```bash
+pytest                                              # 28 tests
+pytest --cov=secretscan --cov-report=term-missing   # CI requires >= 90%
+ruff check . && ruff format --check . && mypy
+```
+
+Each behaviour maps to a test:
+
+| Behaviour                                                        | Test                                                                               |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Detects AWS keys, GitHub tokens and private key headers          | `test_engine.py::test_detects_*`                                                   |
+| Reports the right rule, path and line                            | `test_detects_aws_key_with_location`                                               |
+| `# secretscan:ignore` suppresses a line                          | `test_inline_ignore_marker_suppresses`                                             |
+| Placeholders (`example`, `your_`, ...) are skipped               | `test_placeholder_values_are_skipped`                                              |
+| Generic `password = "..."` needs entropy >= 3.0                  | `test_generic_rule_needs_enough_entropy`                                           |
+| A specific rule wins over the generic one (one finding, not two) | `test_specific_rule_wins_over_generic`                                             |
+| Entropy detector is opt-in; git SHAs never trip it               | `test_entropy_detector_is_opt_in`, `test_git_sha_is_not_flagged_as_high_entropy`   |
+| Entropy is 0 to log2(distinct symbols) for any string            | `test_entropy.py` (includes a Hypothesis property test)                            |
+| The raw secret never appears in `repr`, text or SARIF output     | `test_finding_repr_never_contains_the_secret`, `test_sarif_output_shape_and_no_raw_secret` |
+| Diff parser tracks path, line and commit; `+++` in content is data | `test_parse_diff_tracks_paths_lines_and_commit`                                  |
+| Worktree scan skips binary, `.git` and oversized files           | `test_worktree_skips_binary_git_and_big_files`                                     |
+| Staged scan sees only staged additions                           | `test_staged_only_sees_staged_additions`                                           |
+| History finds a line that was later deleted                      | `test_history_finds_lines_that_were_later_deleted`, `test_history_scan_catches_removed_secret` |
+| Baseline hides old findings (even after a line shift), not new ones | `test_baseline_roundtrip_hides_old_but_not_new`                                 |
+| `.secretscan.toml` allowlist works                               | `test_allowlist_config`                                                            |
+| Exit code `2` on bad baseline path or non-git repo               | `test_bad_baseline_path_is_an_error`, `test_not_a_git_repo_is_an_error`            |
+| `install-hook` refuses to overwrite, and the hook blocks a secret | `test_install_hook_and_precommit_blocks_secret`                                   |
+
+The history tests build real temporary git repositories. Fixture secrets in [conftest.py](tests/conftest.py) are assembled at runtime so the repo never trips its own scanner.
+
+## How it works
 
 ![engine](figs/engine.png)
 
-`scan_chunk` applies the following, in order, to each line:
+Sources, engine and reporters talk only through two immutable types, `Chunk` (one line plus origin) and `Finding` (a suspected secret), so each part is testable alone.
 
-1. **Skip filters.** Lines over 4000 characters (minified code, which also bounds regex cost) and lines containing `secretscan:ignore` are dropped.
-2. **Pattern rules.** Each `Rule` is a compiled regex with a capture group for the secret and an optional minimum Shannon entropy.
-3. **Placeholder filter.** Matches containing `example`, `changeme`, `your_`, `<`, `xxxx`, `placeholder` or `dummy` (case-insensitive) are discarded.
-4. **Deduplication.** A secret already reported on the line is not reported again. Rule order matters, so specific rules are listed before the general one and win when both match.
-5. **Entropy detector (opt-in).** If `entropy_threshold` is given, tokens of 20 or more characters from the base64 or URL-safe alphabet are flagged when their entropy meets the threshold.
+| Module                                      | Role                                       |
+| ------------------------------------------- | ------------------------------------------ |
+| [sources.py](src/secretscan/sources.py)     | worktree, staged and history to `Chunk`s   |
+| [rules.py](src/secretscan/rules.py)         | built-in rules: AWS, GitHub, Slack, private key, JWT, generic credential |
+| [engine.py](src/secretscan/engine.py)       | `Chunk`s to `Finding`s, with filters       |
+| [entropy.py](src/secretscan/entropy.py)     | Shannon entropy                            |
+| [baseline.py](src/secretscan/baseline.py)   | accepted-findings file (line-shift safe)   |
+| [config.py](src/secretscan/config.py)       | `.secretscan.toml` allowlist               |
+| [reporters.py](src/secretscan/reporters.py) | text, JSON, SARIF                          |
+| [cli.py](src/secretscan/cli.py)             | argument parsing, hook installer           |
 
-### 2.1 Built-in rules
+Sources are lazy generators, so memory stays flat on large repositories.
 
-| Rule id | Target | Notes |
-|---|---|---|
-| `aws-access-key-id` | `AKIA…` / `ASIA…` plus 16 `[0-9A-Z]` | |
-| `github-token` | `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` plus 36 or more alphanumerics | |
-| `slack-token` | `xox[baprs]-…` | |
-| `private-key` | PEM header (`RSA`, `EC`, `DSA`, `OPENSSH` or bare) | Matches the header line only |
-| `jwt` | Three base64url segments, the first two starting `eyJ` | |
-| `generic-credential` | `api_key`, `secret`, `token`, `passwd`, `password` assigned a quoted value of 8 or more characters | Requires entropy of at least 3.0 bits per character |
+## CI
 
-### 2.2 Entropy
+[ci.yml](.github/workflows/ci.yml) runs lint (ruff, mypy), a test matrix (Linux, macOS, Windows x Python 3.11-3.13) with a 90% coverage gate, a dogfood job that scans this repo's full history and uploads SARIF, and a build. [release.yml](.github/workflows/release.yml) publishes on `v*` tags. Also provided: a [Dockerfile](Dockerfile), a reusable [action.yml](action.yml) and a [pre-commit hook](.pre-commit-hooks.yml).
 
-Shannon entropy is computed per character as H = −Σ pᵢ log₂ pᵢ ([entropy.py](src/secretscan/entropy.py)). Entropy is bounded by log₂ of the alphabet size, so the threshold interacts with the alphabet. A hex string such as a git SHA can never exceed 4.0 bits per character. A threshold above 4.0 therefore excludes hex identifiers by construction, and a test asserts this. The default for the generic rule (3.0) rejects repetitive values like `aaaaaaaa`.
+## Limitations
 
-## 3. Sources
-
-![sources](figs/sources.png)
-
-Sources turn the outside world into `Chunk`s. Three of them share one diff parser.
-
-| Source | Function | Input |
-|---|---|---|
-| Working tree | `iter_worktree(root, max_bytes=1_000_000)` | Files on disk |
-| Staged changes | `iter_staged(repo)` | `git diff --cached -U0` |
-| History | `iter_history(repo, revs=("--all",))` | `git log -p -U0 --format=commit:%H` |
-
-**Working tree.** The walk prunes `.git`, `.hg`, `.venv`, `venv`, `node_modules`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `dist` and `build`. It skips symlinks, unreadable files, files over `max_bytes`, and files with a NUL byte in the first 8 KiB (treated as binary). Undecodable bytes are replaced rather than raising.
-
-**Diff-based sources.** `parse_diff` is a small state machine over unified-diff output. It tracks the commit, the target path (from `+++`, with `/dev/null` meaning a deletion), and the new-side line number from each `@@` hunk header. Only added lines (`+`) become chunks, so removed lines are never reported. A `+++` line inside a hunk is treated as content, not as a header.
-
-**Git invocation.** Git runs as a subprocess with `core.quotepath=off`. stderr goes to a temporary file instead of a pipe to avoid a deadlock on large output, and a non-zero exit raises `GitError` with git's message.
-
-## 4. Evaluation
-
-Evaluation consists of a unit and property test suite.
-
-```
-uv run pytest -q   →   19 passed
-```
-
-| Test file | Covers |
-|---|---|
-| [test_engine.py](tests/test_engine.py) | Per-rule detection with location, inline ignore, placeholders, entropy gating of the generic rule, specific-over-generic precedence, opt-in entropy detector, hex SHA not flagged, secret absent from `repr` and `redacted` |
-| [test_entropy.py](tests/test_entropy.py) | Known values (0 bits, 1 bit, 4 bits) and a Hypothesis property: entropy never exceeds log₂ of the number of distinct symbols |
-| [test_sources.py](tests/test_sources.py) | Diff parsing (paths, line numbers, commit, `+++` in content, deletions), worktree filtering, staged-only additions, and history containing a line deleted from HEAD |
-
-The history test builds a real temporary git repository. It is the check that justifies having a history mode, since a deleted secret must still be found. Fixture secrets in [conftest.py](tests/conftest.py) are assembled at runtime so the repository does not trip its own scanner.
-
-## 5. Usage (library)
-
-```python
-from pathlib import Path
-from secretscan.engine import scan_chunks
-from secretscan.sources import iter_worktree, iter_staged, iter_history
-
-repo = Path(".")
-
-for f in scan_chunks(iter_history(repo), entropy_threshold=4.5):
-    print(f.rule_id, f.path, f.line, f.commit, f.redacted)
-```
-
-`entropy_threshold=None` (the default) disables the entropy detector.
-
-## 6. Limitations
-
-- **Line-local matching.** Each line is scanned alone, so multi-line secrets are not detected. For private keys only the `BEGIN` header is matched, not the key body.
-- **Fixed rule set.** Only the six rules above exist.
-- **Heuristic filters.** The placeholder filter is substring-based, so a real secret containing `<` or `example` is silently dropped. `secretscan:ignore` suppresses everything on its line.
-- **Entropy ambiguity.** The entropy detector does not distinguish random secrets from other high-entropy strings such as hashes in base64, and it has no allowlist.
-- **History scope.** History scanning reads only added lines from `git log -p`. Merge commits are not shown with a diff by default, and renamed or binary content is not examined.
-- **Size limits.** Files over 1 MB and lines over 4000 characters are skipped, which can hide a secret in a large file.
-
-## 7. Reproducing
-
-Requires Python 3.10 or newer and `git` on `PATH`. The `.python-version` file pins 3.10.
-
-```bash
-uv sync --extra dev
-uv run pytest -q
-```
-
-`pytest` also works directly in any environment with `pytest` and `hypothesis` installed (`pythonpath = ["src"]` is set in [pyproject.toml](pyproject.toml)).
-
-Dev extras declared in [pyproject.toml](pyproject.toml): `pytest`, `pytest-cov`, `hypothesis`, `ruff`, `mypy`, `build`. The test suite uses `hypothesis`, so it must be installed. The package has no runtime dependencies.
+- Lines are scanned one at a time, so multi-line secrets are not detected. Private keys match the `BEGIN` header only.
+- The placeholder filter is substring-based, so a real secret containing `example` or `<` is dropped.
+- Files over 1 MB and lines over 4000 characters are skipped.
+- History scanning reads added lines only; merge-commit diffs and binary content are not examined.
+- A pre-commit hook can be bypassed with `--no-verify`. CI is the enforcement.
+- If a real secret was ever committed, rotate it. Rewriting history is secondary.
 
 ## License
 
-MIT, as declared in [pyproject.toml](pyproject.toml).
+MIT
