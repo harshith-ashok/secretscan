@@ -1,0 +1,174 @@
+unformatted: File would be reformatted
+ --> src/secretscan/__init__.py:3:22
+  |
+2 |
+  - __version__ = "0.1.0"
+3 + __version__ = "0.1.0"
+  |
+
+unformatted: File would be reformatted
+ --> src/secretscan/__main__.py:5:17
+  |
+4 |
+  - sys.exit(main())
+5 + sys.exit(main())
+  |
+
+unformatted: File would be reformatted
+  --> src/secretscan/baseline.py:24:63
+   |
+23 | def filter_new(findings: Iterable[Finding], known: set[str]) -> list[Finding]:
+   -     return [f for f in findings if f.fingerprint not in known]
+24 +     return [f for f in findings if f.fingerprint not in known]
+   |
+
+unformatted: File would be reformatted
+   --> src/secretscan/cli.py:29:23
+    |
+28  |     mode.add_argument("--staged", action="store_true", help="scan staged changes only")
+    -     mode.add_argument("--history", nargs="*", metavar="REV", default=None,
+    -                       help="scan every commit (optionally limited to revisions, "
+    -                            "e.g. main~20..HEAD)")
+    -     s.add_argument("--entropy", type=float, metavar="BITS", default=None,
+    -                    help="also flag random-looking tokens at or above this entropy (try 4.5)")
+29  +     mode.add_argument(
+30  +         "--history",
+31  +         nargs="*",
+32  +         metavar="REV",
+33  +         default=None,
+34  +         help="scan every commit (optionally limited to revisions, e.g. main~20..HEAD)",
+35  +     )
+36  +     s.add_argument(
+37  +         "--entropy",
+38  +         type=float,
+39  +         metavar="BITS",
+40  +         default=None,
+41  +         help="also flag random-looking tokens at or above this entropy (try 4.5)",
+42  +     )
+43  |     s.add_argument("--baseline", type=Path, help="ignore findings recorded in this baseline")
+    -     s.add_argument("--write-baseline", type=Path, metavar="FILE",
+    -                    help="record current findings as the baseline and exit 0")
+44  +     s.add_argument(
+45  +         "--write-baseline",
+46  +         type=Path,
+47  +         metavar="FILE",
+48  +         help="record current findings as the baseline and exit 0",
+49  +     )
+50  |     s.add_argument("--format", choices=sorted(FORMATS), default="text")
+--------------------------------------------------------------------------------
+91  |         ["git", "-C", str(args.path), "rev-parse", "--git-path", "hooks/pre-commit"],
+    -         capture_output=True, text=True,
+92  +         capture_output=True,
+93  +         text=True,
+94  |     )
+--------------------------------------------------------------------------------
+119 | if __name__ == "__main__":
+    -     sys.exit(main())
+120 +     sys.exit(main())
+    |
+
+unformatted: File would be reformatted
+  --> src/secretscan/config.py:33:6
+   |
+32 |         secret_regexes=tuple(re.compile(r) for r in allow.get("regexes", ())),
+   -     )
+33 +     )
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/engine.py:60:63
+   |
+59 |     for chunk in chunks:
+   -         yield from scan_chunk(chunk, rules, entropy_threshold)
+60 +         yield from scan_chunk(chunk, rules, entropy_threshold)
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/entropy.py:17:68
+   |
+16 |     h = -sum((c / n) * math.log2(c / n) for c in Counter(s).values())
+   -     return max(0.0, h)  # avoids printing -0.0 for constant strings
+17 +     return max(0.0, h)  # avoids printing -0.0 for constant strings
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/models.py:39:55
+   |
+38 |             return "*" * len(self.secret)
+   -         return f"{self.secret[:4]}…{self.secret[-2:]}"
+39 +         return f"{self.secret[:4]}…{self.secret[-2:]}"
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/reporters.py:82:64
+   |
+81 |
+   - FORMATS = {"text": to_text, "json": to_json, "sarif": to_sarif}
+82 + FORMATS = {"text": to_text, "json": to_json, "sarif": to_sarif}
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/rules.py:57:2
+   |
+56 |     ),
+   - )
+57 + )
+   |
+
+unformatted: File would be reformatted
+  --> src/secretscan/sources.py:95:6
+   |
+94 |         )
+   -     )
+95 +     )
+   |
+
+unformatted: File would be reformatted
+  --> tests/conftest.py:39:20
+   |
+38 | def gh_token() -> str:
+   -     return GH_TOKEN
+39 +     return GH_TOKEN
+   |
+
+unformatted: File would be reformatted
+  --> tests/test_cli.py:86:23
+   |
+85 |     finally:
+   -         os.chdir(prev)
+86 +         os.chdir(prev)
+   |
+
+unformatted: File would be reformatted
+  --> tests/test_engine.py:59:37
+   |
+58 |     assert aws_key not in repr(f)
+   -     assert aws_key not in f.redacted
+59 +     assert aws_key not in f.redacted
+   |
+
+unformatted: File would be reformatted
+  --> tests/test_entropy.py:25:86
+   |
+24 |     h = shannon_entropy(s)
+   -     assert -1e-9 <= h <= math.log2(len(set(s))) + 1e-9 if len(set(s)) > 1 else h == 0
+25 +     assert -1e-9 <= h <= math.log2(len(set(s))) + 1e-9 if len(set(s)) > 1 else h == 0
+   |
+
+unformatted: File would be reformatted
+  --> tests/test_sources.py:3:51
+   |
+2  | The most valuable one builds a real temporary git repo, commits a line,
+   - deletes it, and asserts history still contains it, 
+3  + deletes it, and asserts history still contains it,
+4  | which is the whole reason the history mode exists.
+5  | """
+6  +
+7  | from conftest import git
+--------------------------------------------------------------------------------
+70 |     assert "token_line" in texts  # gone from HEAD, still in history
+   -     assert "clean" in texts
+71 +     assert "clean" in texts
+   |
+
+16 files would be reformatted, 2 files already formatted

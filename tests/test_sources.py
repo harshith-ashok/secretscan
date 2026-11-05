@@ -1,8 +1,9 @@
 """
 The most valuable one builds a real temporary git repo, commits a line,
-deletes it, and asserts history still contains it, 
+deletes it, and asserts history still contains it,
 which is the whole reason the history mode exists.
 """
+
 from conftest import git
 
 from secretscan.sources import iter_history, iter_staged, iter_worktree, parse_diff
