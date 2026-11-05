@@ -1,4 +1,5 @@
 <h3 align="center">secretscan</h3>
+
 ---
 
 Find leaked secrets in files, staged changes and git history
@@ -56,4 +57,20 @@ flowchart TD
     RL --> ED{"entropy threshold set?"}
     ED -- yes --> TK["for each 20+ char token: H >= threshold?"]
     TK --> Y
+```
+
+## Sources
+
+sources turn the outside world into `Chunk`s. Three of them share one diff parser.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Header: "diff --git" line
+    Header --> Header: "+++ b/path" sets current path
+    Header --> Hunk: "@@ -a,b +c,d @@" sets line = c
+    Hunk --> Hunk: "+" line, emit Chunk and line += 1
+    Hunk --> Header: next "diff --git" line
+    Hunk --> Idle: "commit:sha" marker
+    Idle --> Idle: "commit:sha" marker
 ```
