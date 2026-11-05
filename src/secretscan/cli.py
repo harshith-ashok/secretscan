@@ -101,7 +101,7 @@ def cmd_install_hook(args: argparse.Namespace) -> int:
         print(f"{hook} already exists (use --force to overwrite).", file=sys.stderr)
         return 2
     hook.parent.mkdir(parents=True, exist_ok=True)
-    hook.write_text(HOOK)
+    hook.write_text(HOOK, newline="\n")  # CRLF would break the #! line under sh
     os.chmod(hook, hook.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     print(f"Installed {hook}")
     return 0

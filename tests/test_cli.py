@@ -4,7 +4,7 @@ import stat
 
 from conftest import git
 
-from secretscan.cli import main
+from secretscan.cli import HOOK, main
 
 
 def test_clean_tree_exits_zero(tmp_path, capsys):
@@ -73,7 +73,9 @@ def test_not_a_git_repo_is_an_error(tmp_path):
 def test_install_hook_and_precommit_blocks_secret(repo, aws_key):
     assert main(["install-hook", str(repo)]) == 0
     hook = repo / ".git" / "hooks" / "pre-commit"
-    assert hook.stat().st_mode & stat.S_IXUSR
+    assert hook.read_bytes() == HOOK.encode()  # LF endings on every platform
+    if os.name != "nt":  # Windows has no Unix exec bit
+        assert hook.stat().st_mode & stat.S_IXUSR
     assert main(["install-hook", str(repo)]) == 2  # refuses to overwrite
     assert main(["install-hook", str(repo), "--force"]) == 0
     (repo / "a.py").write_text(f"K='{aws_key}'\n")
