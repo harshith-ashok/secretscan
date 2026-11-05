@@ -1,4 +1,5 @@
-# Secret Scan
+<h3 align="center">secretscan</h3>
+---
 
 Find leaked secrets in files, staged changes and git history
 
@@ -36,4 +37,23 @@ flowchart LR
     B --> T
     B --> J
     B --> SA
+```
+
+## Engine
+
+Turn chunks of text into findings.
+
+```mermaid
+flowchart TD
+    C["Chunk"] --> L{"line too long or has ignore marker?"}
+    L -- yes --> X["skip"]
+    L -- no --> RL["for each rule: finditer"]
+    RL --> P{"placeholder or already seen?"}
+    P -- yes --> RL
+    P -- no --> EN{"rule has min_entropy and H below it?"}
+    EN -- yes --> RL
+    EN -- no --> Y["yield Finding"]
+    RL --> ED{"entropy threshold set?"}
+    ED -- yes --> TK["for each 20+ char token: H >= threshold?"]
+    TK --> Y
 ```
