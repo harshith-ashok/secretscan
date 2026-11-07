@@ -1,0 +1,36 @@
+name: Real-world scan
+
+# Clones the repos in realworld/repos.toml and scans their full history.
+# Slow and network-bound, so it runs weekly and on demand, not on every push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  realworld:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      # Reuse earlier clones; the suite only needs to `git fetch` updates.
+      - uses: actions/cache@v4
+        with:
+          path: .realworld-cache
+          key: realworld-${{ hashFiles('realworld/repos.toml') }}-${{ github.run_id }}
+          restore-keys: realworld-${{ hashFiles('realworld/repos.toml') }}-
+      - run: pytest realworld -s
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: realworld-reports # redacted findings, one JSON per repo
+          path: realworld/reports/
+          if-no-files-found: ignore

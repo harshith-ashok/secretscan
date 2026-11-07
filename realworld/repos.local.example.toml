@@ -1,0 +1,11 @@
+# Copy to repos.local.toml (git-ignored) and list your own repos.
+# A local `path` is scanned in place and never modified or cloned.
+
+[[repo]]
+name = "my-project"
+path = "~/Dev/my-project"
+
+[[repo]]
+name = "my-private-repo"
+url = "git@github.com:me/my-private-repo.git"
+max_findings = 0 # fail on any finding

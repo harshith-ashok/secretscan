@@ -9,3 +9,8 @@ dist/
 build/
 *.egg-info/
 .coverage
+
+# realworld suite
+.realworld-cache/
+realworld/reports/
+realworld/repos.local.toml

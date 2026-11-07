@@ -1,0 +1,29 @@
+# Public repos to clone (full history) into .realworld-cache/ and scan.
+#
+# Keys:
+#   name         unique label, also the cache directory name
+#   url          git URL to clone            (or use `path` for a local repo)
+#   ref          limit the history scan to this revision/range (default: --all)
+#   max_findings fail if more findings than this (omit to only record them)
+#   max_seconds  fail if the history scan takes longer (default 600)
+#
+# Personal or private repos go in repos.local.toml (git-ignored); see
+# repos.local.example.toml.
+
+[[repo]]
+name = "click"
+url = "https://github.com/pallets/click"
+
+[[repo]]
+name = "requests"
+url = "https://github.com/psf/requests"
+
+[[repo]]
+name = "flask"
+url = "https://github.com/pallets/flask"
+
+# Bigger stress tests, uncomment to try:
+[[repo]]
+name = "django"
+url = "https://github.com/django/django"
+max_seconds = 1800
