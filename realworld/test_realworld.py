@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from realworld_report import SUMMARIES
 
 from secretscan.cli import main
 from secretscan.config import load_config
-from secretscan.engine import scan_chunks
+from secretscan.engine import LEVELS, scan_chunks
 from secretscan.models import Finding
-from secretscan.reporters import FORMATS
+from secretscan.reporters import FORMATS, to_text
 from secretscan.sources import iter_history
 
 HERE = Path(__file__).parent
@@ -22,6 +23,7 @@ CACHE = HERE.parent / ".realworld-cache"
 REPORTS = HERE / "reports"
 MANIFESTS = (HERE / "repos.toml", HERE / "repos.local.toml")
 DEFAULT_MAX_SECONDS = 600.0
+SHOW_TOP = 3  # findings printed per repo (highest confidence first); all go to the reports
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class Repo:
     path: str | None = None
     ref: str | None = None
     max_findings: int | None = None
+    min_findings: int | None = None  # for repos known to contain a leak: the scanner must see it
     max_seconds: float = DEFAULT_MAX_SECONDS
 
 
@@ -80,20 +83,31 @@ def scan(request: pytest.FixtureRequest) -> Scan:
     revs = (repo.ref,) if repo.ref else ("--all",)
 
     start = time.perf_counter()
-    findings = [f for f in scan_chunks(
-        iter_history(root, revs)) if not config.allows(f)]
+    findings = [f for f in scan_chunks(iter_history(root, revs)) if not config.allows(f)]
     seconds = time.perf_counter() - start
 
     by_rule = Counter(f.rule_id for f in findings)
+    by_confidence = Counter(f.confidence for f in findings)
     REPORTS.mkdir(exist_ok=True)
-    (REPORTS / f"{repo.name}.json").write_text(
-        json.dumps({"seconds": round(seconds, 2),
-                   "by_rule": by_rule}, indent=2)
-        + "\n"
-        + FORMATS["json"](findings)
-    )
-    print(
-        f"\n[{repo.name}] {len(findings)} finding(s) in {seconds:.1f}s {dict(by_rule)}")
+    summary = {
+        "seconds": round(seconds, 2),
+        "by_rule": by_rule,
+        "by_confidence": by_confidence,
+        "findings": json.loads(FORMATS["json"](findings))["findings"],
+    }
+    (REPORTS / f"{repo.name}.json").write_text(json.dumps(summary, indent=2) + "\n")
+    (REPORTS / f"{repo.name}.txt").write_text(to_text(findings))
+
+    ranked = sorted(findings, key=lambda f: (-LEVELS.index(f.confidence), f.path, f.line))
+    lines = [
+        f"[{repo.name}] {len(findings)} finding(s) in {seconds:.1f}s"
+        f" by confidence {dict(by_confidence)} by rule {dict(by_rule)}"
+    ]
+    for f in ranked[:SHOW_TOP]:  # cite, confidence, masked match, suggestion
+        lines.append(to_text([f]).rsplit("\n\n", 1)[0])
+    if len(ranked) > SHOW_TOP:
+        lines.append(f"    ... {len(ranked) - SHOW_TOP} more in realworld/reports/{repo.name}.txt")
+    SUMMARIES[repo.name] = "\n".join(lines) + "\n"
     return Scan(repo, root, findings, seconds)
 
 
@@ -109,10 +123,25 @@ def test_findings_within_budget(scan: Scan) -> None:
     )
 
 
+def test_known_leaks_are_detected(scan: Scan) -> None:
+    if scan.repo.min_findings is None:
+        pytest.skip("no min_findings set")
+    assert len(scan.findings) >= scan.repo.min_findings, (
+        f"only {len(scan.findings)} findings; a known leak was missed"
+    )
+
+
 def test_findings_are_well_formed(scan: Scan) -> None:
     for f in scan.findings:
         # history findings always have a commit
         assert f.path and f.line >= 1 and f.commit
+
+
+def test_every_finding_has_cite_confidence_match_and_suggestion(scan: Scan) -> None:
+    for f in scan.findings:
+        assert f.confidence in LEVELS
+        assert f.context and f.suggestion
+        assert f.redacted in f.context  # the match shows the masked secret in place
 
 
 @pytest.mark.parametrize("fmt", sorted(FORMATS))
@@ -131,7 +160,6 @@ def test_json_and_sarif_are_valid_and_complete(scan: Scan) -> None:
 
 def test_cli_worktree_scan_does_not_error(scan: Scan, tmp_path: Path) -> None:
     out = tmp_path / "r.json"
-    code = main(["scan", str(scan.root), "--format",
-                "json", "--output", str(out)])
+    code = main(["scan", str(scan.root), "--format", "json", "--output", str(out)])
     assert code in (0, 1)  # 2 would mean the scanner itself failed
     json.loads(out.read_text())

@@ -19,6 +19,18 @@ def test_detects_private_key_header():
     assert [f.rule_id for f in run("-----BEGIN RSA PRIVATE KEY-----")] == ["private-key"]
 
 
+def test_detects_unquoted_env_file_secret():
+    blob = "Zk9xQ2v8Lw3Rt7Yb1Nc5Hd4Jm6Pa0Se"  # random-looking; the key name is irrelevant
+    assert [f.rule_id for f in run(f"REST={blob}")] == ["env-secret"]
+    assert [f.rule_id for f in run(f"export REST = {blob}")] == ["env-secret"]
+
+
+def test_env_rule_ignores_ordinary_assignments():
+    sha = "a3f5c9e1b27d4086f1e2c3d4b5a69788c9d0e1f2"
+    for line in ("PORT=8080", "NAME=aaaaaaaaaaaaaaaaaaaaaaaa", f"COMMIT={sha}", "DEBUG=true"):
+        assert run(line) == [], line
+
+
 def test_clean_line_has_no_findings():
     assert run("x = compute(1, 2)  # nothing to see") == []
 
@@ -57,3 +69,43 @@ def test_finding_repr_never_contains_the_secret(aws_key):
     [f] = run(aws_key)
     assert aws_key not in repr(f)
     assert aws_key not in f.redacted
+
+
+def test_finding_carries_confidence_match_and_suggestion(aws_key):
+    [f] = run(f"KEY = '{aws_key}'")
+    assert f.confidence == "high"
+    assert f.context == "KEY = 'AKIA…90'"  # the line, with the secret masked
+    assert "IAM" in f.suggestion
+
+
+def test_context_masks_every_secret_on_the_line(aws_key, gh_token):
+    findings = run(f"a={aws_key} b={gh_token}")
+    assert len(findings) == 2
+    for f in findings:
+        assert aws_key not in f.context and gh_token not in f.context
+
+
+def test_confidence_drops_one_level_in_tests_and_docs(aws_key):
+    def conf(path):
+        return next(scan_chunk(Chunk(aws_key, path, 1))).confidence
+
+    assert conf("src/app.py") == "high"
+    assert conf("tests/test_app.py") == "medium"
+    assert conf("docs/setup.md") == "medium"
+    assert conf("src/test_helpers.py") == "medium"
+
+
+def test_rule_confidence_levels():
+    [env] = run("REST=Zk9xQ2v8Lw3Rt7Yb1Nc5Hd4Jm6Pa0Se")
+    [generic] = run('password = "correct-horse-battery"')
+    assert (env.confidence, generic.confidence) == ("medium", "low")
+
+
+def test_history_suggestion_says_deleting_is_not_enough(aws_key):
+    [f] = scan_chunk(Chunk(aws_key, "f.py", 1, "67632ec2abcdef"))
+    assert "67632ec2" in f.suggestion and "not enough" in f.suggestion
+
+
+def test_long_lines_are_trimmed_around_the_match(aws_key):
+    [f] = run("x = 1; " * 40 + aws_key + " # " + "y" * 200)
+    assert "AKIA…90" in f.context and len(f.context) <= 102

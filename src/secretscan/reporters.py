@@ -19,7 +19,11 @@ def to_text(findings: Sequence[Finding]) -> str:
         where = f"{f.path}:{f.line}"
         commit = f"  (commit {f.commit[:8]})" if f.commit else ""
         lines.append(f"{where}  [{f.rule_id}] {f.description}  {f.redacted}{commit}")
-    lines.append(f"\n{len(findings)} potential secret(s) found.")
+        lines.append(f"    confidence: {f.confidence}")
+        lines.append(f"    match:      {f.context}")
+        lines.append(f"    suggestion: {f.suggestion}")
+        lines.append("")
+    lines.append(f"{len(findings)} potential secret(s) found.")
     return "\n".join(lines) + "\n"
 
 
@@ -31,6 +35,9 @@ def to_json(findings: Sequence[Finding]) -> str:
             "line": f.line,
             "commit": f.commit,
             "secret": f.redacted,
+            "confidence": f.confidence,
+            "match": f.context,
+            "suggestion": f.suggestion,
             "fingerprint": f.fingerprint,
         }
         for f in findings
@@ -44,16 +51,17 @@ def to_sarif(findings: Sequence[Finding]) -> str:
         {
             "ruleId": f.rule_id,
             "level": "error",
-            "message": {"text": f"{f.description} ({f.redacted})"},
+            "message": {"text": f"{f.description} ({f.redacted}). {f.suggestion}"},
             "locations": [
                 {
                     "physicalLocation": {
                         "artifactLocation": {"uri": f.path},
-                        "region": {"startLine": f.line},
+                        "region": {"startLine": f.line, "snippet": {"text": f.context}},
                     }
                 }
             ],
             "partialFingerprints": {"secretscan/v1": f.fingerprint},
+            "properties": {"confidence": f.confidence},
         }
         for f in findings
     ]
