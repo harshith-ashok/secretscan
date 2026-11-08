@@ -67,6 +67,7 @@ secretscan scan . --staged                 # staged changes only
 secretscan scan . --history                # every commit
 secretscan scan . --history main~20..HEAD  # a revision range
 secretscan scan . --entropy 4.5            # also flag random-looking tokens
+secretscan scan . --min-confidence medium  # drop low-confidence matches
 secretscan scan . --format sarif --output results.sarif
 secretscan install-hook .                  # block commits that add secrets
 ```
@@ -77,7 +78,7 @@ secretscan install-hook .                  # block commits that add secrets
 | `1`       | findings reported                          |
 | `2`       | error (bad path, not a git repo, git fail) |
 
-Other flags: `--format text|json|sarif`, `--baseline FILE`, `--write-baseline FILE`.
+Other flags: `--format text|json|sarif`, `--min-confidence low|medium|high`, `--baseline FILE`, `--write-baseline FILE`.
 
 Each finding gives a file cite, a confidence level, the matched line with every secret masked, and a rule-specific suggestion. JSON and SARIF carry the same fields.
 
@@ -89,7 +90,47 @@ app.py:1  [aws-access-key-id] AWS access key ID  AKIA…90  (commit 67632ec2)
                 history (commit 67632ec2), so deleting the line is not enough.
 ```
 
-Confidence is `high` for rigid formats (AWS, GitHub, Slack, private keys), `medium` for JWTs and `.env` assignments, and `low` for generic and entropy matches. It drops one level for files under `tests/`, `docs/`, `examples/` and similar, where fake credentials are common.
+Confidence is `high` for rigid vendor formats, `medium` for looser syntax (JWTs, `.env` assignments, URL passwords, auth headers) and `low` for generic and entropy matches. It drops one level for files under `tests/`, `docs/`, `examples/` and similar, where fake credentials are common.
+
+## Detection coverage
+
+29 built-in rules. Rows are ordered most specific first; a secret is reported once, by the first rule that matches it.
+
+| Rule | Detects | Confidence |
+| ---- | ------- | ---------- |
+| `aws-access-key-id` | AWS access key ID | high |
+| `github-token` | GitHub token | high |
+| `github-fine-grained-token` | GitHub fine-grained personal access token | high |
+| `gitlab-token` | GitLab personal access token | high |
+| `google-api-key` | Google API key | high |
+| `google-oauth-client-secret` | Google OAuth client secret | high |
+| `azure-storage-key` | Azure storage account key | high |
+| `digitalocean-token` | DigitalOcean token | high |
+| `stripe-live-key` | Stripe live secret or restricted key | high |
+| `slack-token` | Slack token | high |
+| `slack-webhook` | Slack incoming webhook URL | high |
+| `discord-webhook` | Discord webhook URL | high |
+| `telegram-bot-token` | Telegram bot token | high |
+| `sendgrid-key` | SendGrid API key | high |
+| `twilio-api-key` | Twilio API key SID | high |
+| `mailgun-key` | Mailgun API key | high |
+| `shopify-token` | Shopify access token | high |
+| `npm-token` | npm access token | high |
+| `pypi-token` | PyPI API token | high |
+| `anthropic-key` | Anthropic API key | high |
+| `openai-key` | OpenAI API key | high |
+| `huggingface-token` | Hugging Face access token | high |
+| `private-key` | Private key block | high |
+| `jwt` | JSON Web Token | medium |
+| `aws-secret-access-key` | AWS secret access key | medium |
+| `url-credentials` | Password embedded in a URL | medium |
+| `auth-header` | Hard-coded Authorization header token | medium |
+| `env-secret` | Unquoted secret assignment | medium |
+| `generic-credential` | Hard-coded credential assignment | low |
+
+Plus an opt-in `--entropy` detector for random-looking tokens that no rule knows about (low confidence).
+
+Precision filters: placeholders (`example`, `changeme`, `<...>`) are skipped, stored password hashes (`sha1$...`, bcrypt, argon2), code and template strings, and plain words are not treated as generic credentials, and `# secretscan:ignore` suppresses a line. Use `--min-confidence medium` to gate CI on the stronger matches only.
 
 ## Tests
 
@@ -111,6 +152,8 @@ Each behaviour maps to a test:
 | A specific rule wins over the generic one (one finding, not two)    | `test_specific_rule_wins_over_generic`                                                         |
 | Entropy detector is opt-in; git SHAs never trip it                  | `test_entropy_detector_is_opt_in`, `test_git_sha_is_not_flagged_as_high_entropy`               |
 | Entropy is 0 to log2(distinct symbols) for any string               | `test_entropy.py` (includes a Hypothesis property test)                                        |
+| Every rule detects its format; near misses and false-positive shapes stay quiet | `test_rules.py` |
+| `--min-confidence` filters findings and the exit code | `test_min_confidence_filters_and_sets_exit_code` |
 | Confidence, masked match and suggestion on every finding            | `test_finding_carries_confidence_match_and_suggestion`, `test_rule_confidence_levels`, `test_history_suggestion_says_deleting_is_not_enough`, `test_reporters.py` |
 | Confidence drops one level in test and docs paths                   | `test_confidence_drops_one_level_in_tests_and_docs`                                            |
 | The match line masks every secret on it, so one never leaks another | `test_context_masks_every_secret_on_the_line`, `test_long_lines_are_trimmed_around_the_match`  |
@@ -135,7 +178,7 @@ Sources, engine and reporters talk only through two immutable types, `Chunk` (on
 | Module                                      | Role                                                                                             |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [sources.py](src/secretscan/sources.py)     | worktree, staged and history to `Chunk`s                                                         |
-| [rules.py](src/secretscan/rules.py)         | built-in rules: AWS, GitHub, Slack, private key, JWT, unquoted `.env` secret, generic credential |
+| [rules.py](src/secretscan/rules.py)         | 29 built-in rules and their precision filters |
 | [engine.py](src/secretscan/engine.py)       | `Chunk`s to `Finding`s, with filters                                                             |
 | [entropy.py](src/secretscan/entropy.py)     | Shannon entropy                                                                                  |
 | [baseline.py](src/secretscan/baseline.py)   | accepted-findings file (line-shift safe)                                                         |

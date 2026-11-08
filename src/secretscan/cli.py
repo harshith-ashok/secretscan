@@ -10,7 +10,7 @@ from pathlib import Path
 from . import __version__
 from .baseline import filter_new, load_baseline, save_baseline
 from .config import load_config
-from .engine import scan_chunks
+from .engine import LEVELS, scan_chunks
 from .reporters import FORMATS
 from .sources import GitError, iter_history, iter_staged, iter_worktree
 
@@ -40,6 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="also flag random-looking tokens at or above this entropy (try 4.5)",
     )
+    s.add_argument(
+        "--min-confidence",
+        choices=LEVELS,
+        default="low",
+        help="only report findings at or above this confidence (default: low, i.e. everything)",
+    )
     s.add_argument("--baseline", type=Path, help="ignore findings recorded in this baseline")
     s.add_argument(
         "--write-baseline",
@@ -67,7 +73,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     config = load_config(root)
     findings = [
-        f for f in scan_chunks(chunks, entropy_threshold=args.entropy) if not config.allows(f)
+        f
+        for f in scan_chunks(chunks, entropy_threshold=args.entropy)
+        if not config.allows(f) and LEVELS.index(f.confidence) >= LEVELS.index(args.min_confidence)
     ]
 
     if args.write_baseline:

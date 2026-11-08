@@ -71,6 +71,8 @@ def scan_chunk(
                 continue
             if rule.min_entropy is not None and shannon_entropy(secret) < rule.min_entropy:
                 continue
+            if rule.validator is not None and not rule.validator(secret, m):
+                continue
             seen.add(secret)
             hits.append((rule.id, rule.description, secret, rule.confidence, rule.advice))
 

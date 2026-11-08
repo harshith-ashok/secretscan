@@ -86,3 +86,17 @@ def test_install_hook_and_precommit_blocks_secret(repo, aws_key):
         assert main(["scan", "--staged"]) == 1
     finally:
         os.chdir(prev)
+
+
+def test_min_confidence_filters_and_sets_exit_code(tmp_path, capsys, aws_key):
+    (tmp_path / "a.py").write_text(f"K='{aws_key}'\nPASSWORD = 'Im_a_Teapot42'\n")  # high + low
+    assert main(["scan", str(tmp_path), "--format", "json"]) == 1
+    both = json.loads(capsys.readouterr().out)["findings"]
+    assert sorted(f["confidence"] for f in both) == ["high", "low"]
+
+    assert main(["scan", str(tmp_path), "--format", "json", "--min-confidence", "high"]) == 1
+    only = json.loads(capsys.readouterr().out)["findings"]
+    assert [f["confidence"] for f in only] == ["high"]
+
+    (tmp_path / "a.py").write_text("PASSWORD = 'Im_a_Teapot42'\n")  # only a low finding left
+    assert main(["scan", str(tmp_path), "--min-confidence", "medium"]) == 0
