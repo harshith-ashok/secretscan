@@ -6,6 +6,14 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
+### Fixed
+
+- The GitHub Action in 0.1.0 installed secretscan from PyPI, where it is not published, so
+  `uses: harshith-ashok/secretscan@v0.1.0` failed. It now installs from its own checkout.
+  Use `@v0.2.0` or later.
+
 ### Added
 
 - 22 new detection rules, 29 in total: GitHub fine-grained tokens, GitLab tokens, Google API
@@ -56,5 +64,6 @@ First release.
   workflow.
 - A real-world test suite that clones public repositories and scans their history.
 
-[Unreleased]: https://github.com/harshith-ashok/secretscan/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/harshith-ashok/secretscan/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/harshith-ashok/secretscan/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/harshith-ashok/secretscan/releases/tag/v0.1.0
