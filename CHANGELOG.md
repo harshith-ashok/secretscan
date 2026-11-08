@@ -22,6 +22,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Releases are distributed through GitHub, not PyPI: the release workflow attaches the wheel
+  and sdist to a GitHub Release and builds the container image. Install with
+  `pipx install git+https://github.com/harshith-ashok/secretscan`.
+- The GitHub Action installs from its own checkout, so `uses: ...@v0.1.0` runs exactly that
+  version. The `version` input is removed.
 - The generic credential rule is much stricter. It no longer reports stored password hashes
   (`sha1$...`, bcrypt, argon2), code or template strings (`%(password)s`, `{{ x }}`, `${X}`),
   values equal to the key name (`token: "token"`), or plain single-class words
@@ -47,8 +52,8 @@ First release.
 - Baselines (`--baseline`, `--write-baseline`) that survive code moving, and a
   `.secretscan.toml` allowlist.
 - `install-hook` for a git pre-commit hook, and a pre-commit framework hook.
-- Reusable GitHub Action with optional SARIF upload, a Docker image, and PyPI publishing
-  through trusted publishing.
+- Reusable GitHub Action with optional SARIF upload, a Docker image and a release
+  workflow.
 - A real-world test suite that clones public repositories and scans their history.
 
 [Unreleased]: https://github.com/harshith-ashok/secretscan/compare/v0.1.0...HEAD

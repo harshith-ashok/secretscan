@@ -21,7 +21,7 @@ Git never forgets: deleting a secret in a later commit leaves it in history, whe
 ## Quick start
 
 ```bash
-pipx install secretscan
+pipx install git+https://github.com/harshith-ashok/secretscan
 cd your-repo
 secretscan scan . --history
 ```
@@ -42,11 +42,13 @@ If it reports a real secret, **rotate it first**. Removing it from the latest co
 ## Installation
 
 ```bash
-pipx install secretscan                                           # or: pip install secretscan
-uvx secretscan scan .                                             # run without installing
-pipx install git+https://github.com/harshith-ashok/secretscan     # latest from GitHub
+pipx install git+https://github.com/harshith-ashok/secretscan          # latest
+pipx install git+https://github.com/harshith-ashok/secretscan@v0.1.0   # a specific release
+uvx --from git+https://github.com/harshith-ashok/secretscan secretscan scan .   # no install
 docker run --rm -v "$PWD:/repo" ghcr.io/harshith-ashok/secretscan scan . --history
 ```
+
+`pip install git+https://github.com/harshith-ashok/secretscan` works too, and each [release](https://github.com/harshith-ashok/secretscan/releases) has a wheel to download.
 
 ## Usage
 
@@ -126,7 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 } # history scan needs every commit
-      - uses: harshith-ashok/secretscan@v0.1.0
+      - uses: harshith-ashok/secretscan@main   # or pin a release tag, once one includes this action
         with:
           upload-sarif: "true" # findings appear under Security > Code scanning
 ```
@@ -136,7 +138,6 @@ jobs:
 | `path`         | `.`     | what to scan                                                             |
 | `history`      | `true`  | also scan full git history                                               |
 | `args`         | `""`    | extra flags, e.g. `--baseline .secretscan-baseline.json`                 |
-| `version`      | latest  | secretscan version to install                                            |
 | `upload-sarif` | `false` | upload to GitHub code scanning (needs code scanning enabled on the repo) |
 
 ### pre-commit

@@ -15,9 +15,6 @@ inputs:
   args:
     description: 'Extra arguments, e.g. "--baseline .secretscan-baseline.json --entropy 4.5"'
     default: ""
-  version:
-    description: secretscan version to install, e.g. "0.1.0" (default is the latest release)
-    default: ""
   upload-sarif:
     description: "Upload results to GitHub code scanning (the calling job needs permission security-events: write)"
     default: "false"
@@ -29,11 +26,10 @@ runs:
       with:
         python-version: "3.13"
 
+    # Installs the very version the workflow pinned (uses: ...@v0.1.0), straight from this repo.
     - name: Install secretscan
       shell: bash
-      env:
-        INPUT_VERSION: ${{ inputs.version }}
-      run: pip install "secretscan${INPUT_VERSION:+==$INPUT_VERSION}"
+      run: pip install "$GITHUB_ACTION_PATH"
 
     # Inputs go through env vars, never straight into the script, so a crafted
     # input cannot inject shell commands.

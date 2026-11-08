@@ -95,6 +95,6 @@ Add public repos to [repos.toml](realworld/repos.toml). Your own repos go in `re
 1. In `CHANGELOG.md`, rename `[Unreleased]` to the new version and date, and add a fresh `[Unreleased]` above it.
 2. Bump `__version__` in `src/secretscan/__init__.py`, the only place the version lives.
 3. Commit as `(chore): release X.Y.Z`, then `git tag vX.Y.Z && git push --tags`.
-4. The tag triggers [release.yml](.github/workflows/release.yml), which publishes to PyPI (trusted publishing, no token) and builds the Docker image.
+4. The tag triggers [release.yml](.github/workflows/release.yml), which attaches the wheel and sdist to a GitHub Release and builds the Docker image (`ghcr.io`). Nothing is published to PyPI.
 
 A published tag is never moved or reused. Fix forward with a new version.
