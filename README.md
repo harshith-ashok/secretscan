@@ -1,22 +1,115 @@
-<h3 align="center">secretscan</h3>
+<h1 align="center">secretscan</h1>
 
-<p align="center">Find leaked secrets in files, staged changes and git history. Zero dependencies.</p>
+<p align="center">Find leaked secrets in your files, staged changes and full git history.</p>
 
----
+<p align="center">
+  <a href="https://github.com/harshith-ashok/secretscan/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/harshith-ashok/secretscan/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">
+  <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
+</p>
 
-Git never forgets: deleting a secret in a later commit leaves it in history. `secretscan` checks all three places a secret can live, and every behaviour below is backed by a test.
+Git never forgets: deleting a secret in a later commit leaves it in history, where anyone who can clone the repo can read it. `secretscan` checks every place a secret can live and tells you what to do about each one.
 
-![architecture](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/architecture.png)
+- **Three scopes:** working tree, staged changes, and every commit in history, including lines since deleted.
+- **29 rules** for cloud, payment, messaging, package-registry and AI-provider credentials, plus private keys, JWTs, `.env` files and passwords in URLs. An opt-in entropy detector catches the rest.
+- **Actionable findings:** each one has a file cite, a confidence level, the matched line and a suggestion for fixing it.
+- **Safe by default:** no raw secret is ever printed, logged or written to a report.
+- **Fits your workflow:** pre-commit hook, GitHub Action with code-scanning upload, Docker image, text/JSON/SARIF output, baselines and allowlists.
+- **No dependencies.** Python 3.11+ and `git`, on Linux, macOS and Windows.
 
-## Install
-
-Requires Python 3.11+ and `git` on `PATH`.
+## Quick start
 
 ```bash
-pipx install secretscan        # or: pip install secretscan
-uvx secretscan scan .          # run without installing
+pipx install secretscan
+cd your-repo
+secretscan scan . --history
+```
+
+```text
+app.py:1  [aws-access-key-id] AWS access key ID  AKIA…90  (commit 67632ec2)
+    confidence: high
+    match:      KEY = 'AKIA…90'
+    suggestion: Deactivate this key in IAM and create a new one. Prefer an IAM role or
+                environment credentials over keys in code. It is in git history (commit
+                67632ec2), so deleting the line is not enough.
+
+1 potential secret(s) found.
+```
+
+If it reports a real secret, **rotate it first**. Removing it from the latest commit does not remove it from history.
+
+## Installation
+
+```bash
+pipx install secretscan                                           # or: pip install secretscan
+uvx secretscan scan .                                             # run without installing
+pipx install git+https://github.com/harshith-ashok/secretscan     # latest from GitHub
 docker run --rm -v "$PWD:/repo" ghcr.io/harshith-ashok/secretscan scan . --history
 ```
+
+## Usage
+
+```bash
+secretscan scan .                          # files on disk
+secretscan scan . --staged                 # staged changes only
+secretscan scan . --history                # every commit
+secretscan scan . --history main~20..HEAD  # a revision range
+secretscan scan . --entropy 4.5            # also flag random-looking tokens
+secretscan scan . --min-confidence medium  # drop low-confidence matches
+secretscan scan . --format sarif --output results.sarif
+secretscan install-hook .                  # block commits that add secrets
+```
+
+| Option                               | Meaning                                           |
+| ------------------------------------ | ------------------------------------------------- |
+| `--staged` / `--history [REV...]`    | scan staged changes / commits instead of files    |
+| `--entropy BITS`                     | also flag random-looking tokens (try `4.5`)       |
+| `--min-confidence low\|medium\|high` | report only findings at or above this confidence  |
+| `--format text\|json\|sarif`         | output format (default `text`)                    |
+| `--output FILE`                      | write the report to a file instead of stdout      |
+| `--baseline FILE`                    | ignore findings recorded in this baseline         |
+| `--write-baseline FILE`              | record current findings as the baseline, exit `0` |
+
+| Exit code | Meaning                                       |
+| --------- | --------------------------------------------- |
+| `0`       | clean                                         |
+| `1`       | findings reported                             |
+| `2`       | error (bad path, not a git repo, git failure) |
+
+### Reading a finding
+
+| Field          | What it tells you                                                                   |
+| -------------- | ----------------------------------------------------------------------------------- |
+| **cite**       | `path:line`, plus the commit for history findings                                   |
+| **confidence** | how likely it is real: `high` for rigid vendor formats, `medium` for looser syntax (JWTs, `.env`, URL passwords, auth headers), `low` for generic and entropy matches |
+| **match**      | the source line with every secret masked (first 4 and last 2 characters shown)      |
+| **suggestion** | what to do next, specific to the rule                                               |
+
+Confidence drops one level for files under `tests/`, `docs/`, `examples/` and similar, where fake credentials are common. JSON and SARIF carry the same fields.
+
+## Configuration
+
+**Allowlist.** Put a `.secretscan.toml` in the scanned directory:
+
+```toml
+[allowlist]
+paths   = ["tests/fixtures/*", "docs/*"]   # glob patterns on the finding's path
+regexes = ["^test_"]                       # regexes matched against the secret
+```
+
+**Inline ignore.** Add `# secretscan:ignore` to a line to suppress everything on it.
+
+**Baseline.** Adopt the scanner on an old repo without failing on history you can't change:
+
+```bash
+secretscan scan . --history --write-baseline .secretscan-baseline.json   # once, then commit it
+secretscan scan . --baseline .secretscan-baseline.json                   # in CI: only new findings fail
+```
+
+Baselines fingerprint the rule, path and secret, not the line number, so they survive code moving.
+
+## Integrations
 
 ### GitHub Action
 
@@ -38,7 +131,13 @@ jobs:
           upload-sarif: "true" # findings appear under Security > Code scanning
 ```
 
-Inputs: `path` (default `.`), `history` (default `true`), `args` (extra flags, e.g. `--baseline .secretscan-baseline.json`), `version`, `upload-sarif` (default `false`).
+| Input          | Default | Meaning                                                                  |
+| -------------- | ------- | ------------------------------------------------------------------------ |
+| `path`         | `.`     | what to scan                                                             |
+| `history`      | `true`  | also scan full git history                                               |
+| `args`         | `""`    | extra flags, e.g. `--baseline .secretscan-baseline.json`                 |
+| `version`      | latest  | secretscan version to install                                            |
+| `upload-sarif` | `false` | upload to GitHub code scanning (needs code scanning enabled on the repo) |
 
 ### pre-commit
 
@@ -51,167 +150,91 @@ repos:
       - id: secretscan
 ```
 
-Or install a plain git hook with `secretscan install-hook .`.
+Or install a plain git hook: `secretscan install-hook .`. A hook can be bypassed with `git commit --no-verify`, so CI is the real enforcement.
 
-### Development
+### As a library
 
-```bash
-pip install -e ".[dev]"
+```python
+from pathlib import Path
+from secretscan.engine import scan_chunks
+from secretscan.sources import iter_history
+
+for f in scan_chunks(iter_history(Path("."))):
+    print(f.rule_id, f.confidence, f"{f.path}:{f.line}", f.redacted)
 ```
 
-## Usage
-
-```bash
-secretscan scan .                          # files on disk
-secretscan scan . --staged                 # staged changes only
-secretscan scan . --history                # every commit
-secretscan scan . --history main~20..HEAD  # a revision range
-secretscan scan . --entropy 4.5            # also flag random-looking tokens
-secretscan scan . --min-confidence medium  # drop low-confidence matches
-secretscan scan . --format sarif --output results.sarif
-secretscan install-hook .                  # block commits that add secrets
-```
-
-| Exit code | Meaning                                    |
-| --------- | ------------------------------------------ |
-| `0`       | clean                                      |
-| `1`       | findings reported                          |
-| `2`       | error (bad path, not a git repo, git fail) |
-
-Other flags: `--format text|json|sarif`, `--min-confidence low|medium|high`, `--baseline FILE`, `--write-baseline FILE`.
-
-Each finding gives a file cite, a confidence level, the matched line with every secret masked, and a rule-specific suggestion. JSON and SARIF carry the same fields.
-
-```text
-app.py:1  [aws-access-key-id] AWS access key ID  AKIA…90  (commit 67632ec2)
-    confidence: high
-    match:      KEY = 'AKIA…90'
-    suggestion: Deactivate this key in IAM and create a new one. ... It is in git
-                history (commit 67632ec2), so deleting the line is not enough.
-```
-
-Confidence is `high` for rigid vendor formats, `medium` for looser syntax (JWTs, `.env` assignments, URL passwords, auth headers) and `low` for generic and entropy matches. It drops one level for files under `tests/`, `docs/`, `examples/` and similar, where fake credentials are common.
+`iter_worktree` and `iter_staged` work the same way, and the package ships type hints.
 
 ## Detection coverage
 
-29 built-in rules. Rows are ordered most specific first; a secret is reported once, by the first rule that matches it.
+29 built-in rules, most specific first. A secret is reported once, by the first rule that matches it.
 
-| Rule | Detects | Confidence |
-| ---- | ------- | ---------- |
-| `aws-access-key-id` | AWS access key ID | high |
-| `github-token` | GitHub token | high |
-| `github-fine-grained-token` | GitHub fine-grained personal access token | high |
-| `gitlab-token` | GitLab personal access token | high |
-| `google-api-key` | Google API key | high |
-| `google-oauth-client-secret` | Google OAuth client secret | high |
-| `azure-storage-key` | Azure storage account key | high |
-| `digitalocean-token` | DigitalOcean token | high |
-| `stripe-live-key` | Stripe live secret or restricted key | high |
-| `slack-token` | Slack token | high |
-| `slack-webhook` | Slack incoming webhook URL | high |
-| `discord-webhook` | Discord webhook URL | high |
-| `telegram-bot-token` | Telegram bot token | high |
-| `sendgrid-key` | SendGrid API key | high |
-| `twilio-api-key` | Twilio API key SID | high |
-| `mailgun-key` | Mailgun API key | high |
-| `shopify-token` | Shopify access token | high |
-| `npm-token` | npm access token | high |
-| `pypi-token` | PyPI API token | high |
-| `anthropic-key` | Anthropic API key | high |
-| `openai-key` | OpenAI API key | high |
-| `huggingface-token` | Hugging Face access token | high |
-| `private-key` | Private key block | high |
-| `jwt` | JSON Web Token | medium |
-| `aws-secret-access-key` | AWS secret access key | medium |
-| `url-credentials` | Password embedded in a URL | medium |
-| `auth-header` | Hard-coded Authorization header token | medium |
-| `env-secret` | Unquoted secret assignment | medium |
-| `generic-credential` | Hard-coded credential assignment | low |
+| Rule                         | Detects                                                    | Confidence |
+| ---------------------------- | ---------------------------------------------------------- | ---------- |
+| `aws-access-key-id`          | AWS access key ID                                          | high       |
+| `github-token`               | GitHub token                                               | high       |
+| `github-fine-grained-token`  | GitHub fine-grained personal access token                  | high       |
+| `gitlab-token`               | GitLab personal access token                               | high       |
+| `google-api-key`             | Google API key                                             | high       |
+| `google-oauth-client-secret` | Google OAuth client secret                                 | high       |
+| `azure-storage-key`          | Azure storage account key                                  | high       |
+| `digitalocean-token`         | DigitalOcean token                                         | high       |
+| `stripe-live-key`            | Stripe live secret or restricted key                       | high       |
+| `slack-token`                | Slack token                                                | high       |
+| `slack-webhook`              | Slack incoming webhook URL                                 | high       |
+| `discord-webhook`            | Discord webhook URL                                        | high       |
+| `telegram-bot-token`         | Telegram bot token                                         | high       |
+| `sendgrid-key`               | SendGrid API key                                           | high       |
+| `twilio-api-key`             | Twilio API key SID                                         | high       |
+| `mailgun-key`                | Mailgun API key                                            | high       |
+| `shopify-token`              | Shopify access token                                       | high       |
+| `npm-token`                  | npm access token                                           | high       |
+| `pypi-token`                 | PyPI API token                                             | high       |
+| `anthropic-key`              | Anthropic API key                                          | high       |
+| `openai-key`                 | OpenAI API key                                             | high       |
+| `huggingface-token`          | Hugging Face access token                                  | high       |
+| `private-key`                | Private key block (RSA, EC, DSA, OpenSSH, PGP, encrypted) | high       |
+| `jwt`                        | JSON Web Token                                             | medium     |
+| `aws-secret-access-key`      | AWS secret access key                                      | medium     |
+| `url-credentials`            | Password embedded in a URL                                 | medium     |
+| `auth-header`                | Hard-coded `Authorization` header token                    | medium     |
+| `env-secret`                 | Unquoted `NAME=value` secret, as in `.env` files           | medium     |
+| `generic-credential`         | Hard-coded `password` / `token` / `api_key` assignment     | low        |
 
-Plus an opt-in `--entropy` detector for random-looking tokens that no rule knows about (low confidence).
+To cut false positives, placeholders (`example`, `changeme`, `<...>`) are skipped, and the generic rule ignores stored password hashes (`sha1$...`, bcrypt, argon2), code and template strings, and plain words.
 
-Precision filters: placeholders (`example`, `changeme`, `<...>`) are skipped, stored password hashes (`sha1$...`, bcrypt, argon2), code and template strings, and plain words are not treated as generic credentials, and `# secretscan:ignore` suppresses a line. Use `--min-confidence medium` to gate CI on the stronger matches only.
+### Tested on real repositories
 
-## Tests
+The [real-world suite](CONTRIBUTING.md#real-world-tests) scans the full history of public projects and of a private repo with a known leak:
 
-```bash
-pytest                                              # 28 tests
-pytest --cov=secretscan --cov-report=term-missing   # CI requires >= 90%
-ruff check . && ruff format --check . && mypy
-```
-
-Each behaviour maps to a test:
-
-| Behaviour                                                           | Test                                                                                           |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Detects AWS keys, GitHub tokens and private key headers             | `test_engine.py::test_detects_*`                                                               |
-| Reports the right rule, path and line                               | `test_detects_aws_key_with_location`                                                           |
-| `# secretscan:ignore` suppresses a line                             | `test_inline_ignore_marker_suppresses`                                                         |
-| Placeholders (`example`, `your_`, ...) are skipped                  | `test_placeholder_values_are_skipped`                                                          |
-| Generic `password = "..."` needs entropy >= 3.0                     | `test_generic_rule_needs_enough_entropy`                                                       |
-| A specific rule wins over the generic one (one finding, not two)    | `test_specific_rule_wins_over_generic`                                                         |
-| Entropy detector is opt-in; git SHAs never trip it                  | `test_entropy_detector_is_opt_in`, `test_git_sha_is_not_flagged_as_high_entropy`               |
-| Entropy is 0 to log2(distinct symbols) for any string               | `test_entropy.py` (includes a Hypothesis property test)                                        |
-| Every rule detects its format; near misses and false-positive shapes stay quiet | `test_rules.py` |
-| `--min-confidence` filters findings and the exit code | `test_min_confidence_filters_and_sets_exit_code` |
-| Confidence, masked match and suggestion on every finding            | `test_finding_carries_confidence_match_and_suggestion`, `test_rule_confidence_levels`, `test_history_suggestion_says_deleting_is_not_enough`, `test_reporters.py` |
-| Confidence drops one level in test and docs paths                   | `test_confidence_drops_one_level_in_tests_and_docs`                                            |
-| The match line masks every secret on it, so one never leaks another | `test_context_masks_every_secret_on_the_line`, `test_long_lines_are_trimmed_around_the_match`  |
-| The raw secret never appears in `repr`, text or SARIF output        | `test_finding_repr_never_contains_the_secret`, `test_sarif_output_shape_and_no_raw_secret`     |
-| Diff parser tracks path, line and commit; `+++` in content is data  | `test_parse_diff_tracks_paths_lines_and_commit`                                                |
-| Worktree scan skips binary, `.git` and oversized files              | `test_worktree_skips_binary_git_and_big_files`                                                 |
-| Staged scan sees only staged additions                              | `test_staged_only_sees_staged_additions`                                                       |
-| History finds a line that was later deleted                         | `test_history_finds_lines_that_were_later_deleted`, `test_history_scan_catches_removed_secret` |
-| Baseline hides old findings (even after a line shift), not new ones | `test_baseline_roundtrip_hides_old_but_not_new`                                                |
-| `.secretscan.toml` allowlist works                                  | `test_allowlist_config`                                                                        |
-| Exit code `2` on bad baseline path or non-git repo                  | `test_bad_baseline_path_is_an_error`, `test_not_a_git_repo_is_an_error`                        |
-| `install-hook` refuses to overwrite, and the hook blocks a secret   | `test_install_hook_and_precommit_blocks_secret`                                                |
-
-The history tests build real temporary git repositories. Fixture secrets in [conftest.py](tests/conftest.py) are assembled at runtime so the repo never trips its own scanner.
+| Repository                           | Findings | What they are                                                                              | Scan time |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------ | --------- |
+| click                                | 0        |                                                                                            | 0.8 s     |
+| flask                                | 0        |                                                                                            | 1.2 s     |
+| requests                             | 12       | test private keys and test URL passwords (low and medium confidence), a docs analytics key | 1.6 s     |
+| django                               | 16       | hard-coded test passwords, all low confidence                                              | 45 s      |
+| private repo with a committed `.env` | 1        | a live Stripe key, **high** confidence                                                     | under 1 s |
 
 ## How it works
 
 ![engine](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/engine.png)
 
-Sources, engine and reporters talk only through two immutable types, `Chunk` (one line plus origin) and `Finding` (a suspected secret), so each part is testable alone.
-
-| Module                                      | Role                                                                                             |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [sources.py](src/secretscan/sources.py)     | worktree, staged and history to `Chunk`s                                                         |
-| [rules.py](src/secretscan/rules.py)         | 29 built-in rules and their precision filters |
-| [engine.py](src/secretscan/engine.py)       | `Chunk`s to `Finding`s, with filters                                                             |
-| [entropy.py](src/secretscan/entropy.py)     | Shannon entropy                                                                                  |
-| [baseline.py](src/secretscan/baseline.py)   | accepted-findings file (line-shift safe)                                                         |
-| [config.py](src/secretscan/config.py)       | `.secretscan.toml` allowlist                                                                     |
-| [reporters.py](src/secretscan/reporters.py) | text, JSON, SARIF                                                                                |
-| [cli.py](src/secretscan/cli.py)             | argument parsing, hook installer                                                                 |
-
-Sources are lazy generators, so memory stays flat on large repositories.
-
-## CI
-
-[ci.yml](.github/workflows/ci.yml) runs lint (ruff, mypy), a test matrix (Linux, macOS, Windows x Python 3.11-3.13) with a 90% coverage gate, a dogfood job that scans this repo's full history and uploads SARIF, and a build. [release.yml](.github/workflows/release.yml) publishes on `v*` tags. Also provided: a [Dockerfile](Dockerfile), a reusable [action.yml](action.yml) and a [pre-commit hook](.pre-commit-hooks.yaml).
+Three independent stages (sources, engine, reporters) talk only through two small immutable types, `Chunk` (one line plus where it came from) and `Finding` (a suspected secret), so each can be tested and extended alone. Sources are lazy generators, so memory stays flat on huge repositories. History scans read `git log -p` and report exact line numbers from the diff hunks.
 
 ## Limitations
 
 - Lines are scanned one at a time, so multi-line secrets are not detected. Private keys match the `BEGIN` header only.
 - The placeholder filter is substring-based, so a real secret containing `example` or `<` is dropped.
 - Files over 1 MB and lines over 4000 characters are skipped.
-- History scanning reads added lines only; merge-commit diffs and binary content are not examined.
-- A pre-commit hook can be bypassed with `--no-verify`. CI is the enforcement.
-- If a real secret was ever committed, rotate it. Rewriting history is secondary.
+- History scanning reads added lines only. Merge-commit diffs and binary content are not examined.
+- It finds credentials by format and randomness. It does not check whether one is still live, and it is not a code-vulnerability scanner.
 
-## Screenshots/Demo
+For a much larger rule set or live verification, see tools like [gitleaks](https://github.com/gitleaks/gitleaks) and [trufflehog](https://github.com/trufflesecurity/trufflehog). secretscan aims to be small, dependency-free and clear about what to do next.
 
-![Full report](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/full_report.png)
-_Full scan report for public/private repos_
+## Contributing
 
-![bad-apple](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/bad-apple.png)
-_Known vulnerability in bad-apple private repo flagged_
-
-![django repo](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/django.png)
-_Running test on django repo from `https://github.com/django/django`_
+Bug reports, new rules and fixes are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests and the release process, [CHANGELOG.md](CHANGELOG.md) for what changed, and [SECURITY.md](SECURITY.md) to report a vulnerability privately.
 
 ## License
 
-MIT
+[MIT](LICENSE)
