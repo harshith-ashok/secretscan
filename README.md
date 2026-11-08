@@ -43,7 +43,7 @@ If it reports a real secret, **rotate it first**. Removing it from the latest co
 
 ```bash
 pipx install git+https://github.com/harshith-ashok/secretscan          # latest
-pipx install git+https://github.com/harshith-ashok/secretscan@v0.1.0   # a specific release
+pipx install git+https://github.com/harshith-ashok/secretscan@v0.2.0   # a specific release
 uvx --from git+https://github.com/harshith-ashok/secretscan secretscan scan .   # no install
 docker run --rm -v "$PWD:/repo" ghcr.io/harshith-ashok/secretscan scan . --history
 ```
@@ -128,7 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 } # history scan needs every commit
-      - uses: harshith-ashok/secretscan@main   # or pin a release tag, once one includes this action
+      - uses: harshith-ashok/secretscan@v0.2.0
         with:
           upload-sarif: "true" # findings appear under Security > Code scanning
 ```
@@ -146,7 +146,7 @@ jobs:
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/harshith-ashok/secretscan
-    rev: v0.1.0
+    rev: v0.2.0
     hooks:
       - id: secretscan
 ```
