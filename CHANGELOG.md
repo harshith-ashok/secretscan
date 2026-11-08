@@ -17,6 +17,8 @@ uses [Semantic Versioning](https://semver.org/).
 - `--min-confidence low|medium|high` to report only findings at or above a confidence level.
   It also drives the exit code, so CI can gate on stronger matches.
 - Rules can carry a `validator` for checks a regex cannot express.
+- `SECURITY.md` with how secrets are handled and how to report a vulnerability privately.
+- A "Detection coverage" table in the README, listing every rule and its confidence.
 
 ### Changed
 
@@ -26,6 +28,8 @@ uses [Semantic Versioning](https://semver.org/).
   (`password="normaluser"`). On Django's full history this cut findings from 301 to 16.
 - A specific rule now wins over the `.env` rule, so a committed Stripe live key in a `.env`
   file is reported as high confidence instead of medium.
+- Scans are slower on large histories because there are more rules to run. Django's full
+  history went from about 23 seconds to 45.
 
 ## [0.1.0] - 2026-11-08
 
