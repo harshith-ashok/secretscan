@@ -14,3 +14,4 @@ build/
 .realworld-cache/
 realworld/reports/
 realworld/repos.local.toml
+.DS_Store

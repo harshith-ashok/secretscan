@@ -6,11 +6,54 @@
 
 Git never forgets: deleting a secret in a later commit leaves it in history. `secretscan` checks all three places a secret can live, and every behaviour below is backed by a test.
 
-![architecture](figs/architecture.png)
+![architecture](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/architecture.png)
 
 ## Install
 
 Requires Python 3.11+ and `git` on `PATH`.
+
+```bash
+pipx install secretscan        # or: pip install secretscan
+uvx secretscan scan .          # run without installing
+docker run --rm -v "$PWD:/repo" ghcr.io/harshith-ashok/secretscan scan . --history
+```
+
+### GitHub Action
+
+```yaml
+# .github/workflows/secrets.yml
+name: secrets
+on: [push, pull_request]
+permissions:
+  contents: read
+  security-events: write # only needed for upload-sarif
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # history scan needs every commit
+      - uses: harshith-ashok/secretscan@v0.1.0
+        with:
+          upload-sarif: "true" # findings appear under Security > Code scanning
+```
+
+Inputs: `path` (default `.`), `history` (default `true`), `args` (extra flags, e.g. `--baseline .secretscan-baseline.json`), `version`, `upload-sarif` (default `false`).
+
+### pre-commit
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/harshith-ashok/secretscan
+    rev: v0.1.0
+    hooks:
+      - id: secretscan
+```
+
+Or install a plain git hook with `secretscan install-hook .`.
+
+### Development
 
 ```bash
 pip install -e ".[dev]"
@@ -85,7 +128,7 @@ The history tests build real temporary git repositories. Fixture secrets in [con
 
 ## How it works
 
-![engine](figs/engine.png)
+![engine](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/engine.png)
 
 Sources, engine and reporters talk only through two immutable types, `Chunk` (one line plus origin) and `Finding` (a suspected secret), so each part is testable alone.
 
@@ -104,7 +147,7 @@ Sources are lazy generators, so memory stays flat on large repositories.
 
 ## CI
 
-[ci.yml](.github/workflows/ci.yml) runs lint (ruff, mypy), a test matrix (Linux, macOS, Windows x Python 3.11-3.13) with a 90% coverage gate, a dogfood job that scans this repo's full history and uploads SARIF, and a build. [release.yml](.github/workflows/release.yml) publishes on `v*` tags. Also provided: a [Dockerfile](Dockerfile), a reusable [action.yml](action.yml) and a [pre-commit hook](.pre-commit-hooks.yml).
+[ci.yml](.github/workflows/ci.yml) runs lint (ruff, mypy), a test matrix (Linux, macOS, Windows x Python 3.11-3.13) with a 90% coverage gate, a dogfood job that scans this repo's full history and uploads SARIF, and a build. [release.yml](.github/workflows/release.yml) publishes on `v*` tags. Also provided: a [Dockerfile](Dockerfile), a reusable [action.yml](action.yml) and a [pre-commit hook](.pre-commit-hooks.yaml).
 
 ## Limitations
 
@@ -117,13 +160,13 @@ Sources are lazy generators, so memory stays flat on large repositories.
 
 ## Screenshots/Demo
 
-![Full report](./figs/full_report.png)
+![Full report](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/full_report.png)
 _Full scan report for public/private repos_
 
-![bad-apple](./figs/bad-apple.png)
+![bad-apple](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/bad-apple.png)
 _Known vulnerability in bad-apple private repo flagged_
 
-![django repo](./figs/django.png)
+![django repo](https://raw.githubusercontent.com/harshith-ashok/secretscan/main/figs/django.png)
 _Running test on django repo from `https://github.com/django/django`_
 
 ## License

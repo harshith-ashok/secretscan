@@ -1,25 +1,62 @@
 name: secretscan
-description: Scan a repository (including git history) for leaked secrets
+description: Scan a repository, including git history, for leaked secrets
+author: Harshith Ashok
+branding:
+  icon: shield
+  color: blue
+
 inputs:
   path:
     description: Path to scan
     default: "."
   history:
-    description: Also scan full git history (needs fetch-depth 0)
+    description: Also scan full git history (the checkout needs fetch-depth 0)
     default: "true"
   args:
-    description: Extra arguments, e.g. "--baseline .secretscan-baseline.json --entropy 4.5"
+    description: 'Extra arguments, e.g. "--baseline .secretscan-baseline.json --entropy 4.5"'
     default: ""
+  version:
+    description: secretscan version to install, e.g. "0.1.0" (default is the latest release)
+    default: ""
+  upload-sarif:
+    description: "Upload results to GitHub code scanning (the calling job needs permission security-events: write)"
+    default: "false"
+
 runs:
   using: composite
   steps:
     - uses: actions/setup-python@v5
       with:
         python-version: "3.13"
-    - run: pip install secretscan
+
+    - name: Install secretscan
       shell: bash
-    - shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: pip install "secretscan${INPUT_VERSION:+==$INPUT_VERSION}"
+
+    # Inputs go through env vars, never straight into the script, so a crafted
+    # input cannot inject shell commands.
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_HISTORY: ${{ inputs.history }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_SARIF: ${{ inputs.upload-sarif }}
       run: |
-        flags=""
-        if [ "${{ inputs.history }}" = "true" ]; then flags="--history"; fi
-        secretscan scan "${{ inputs.path }}" $flags ${{ inputs.args }}
+        cmd=(secretscan scan "$INPUT_PATH")
+        if [ "$INPUT_HISTORY" = "true" ]; then cmd+=(--history); fi
+        if [ "$INPUT_SARIF" = "true" ]; then
+          cmd+=(--format sarif --output "$RUNNER_TEMP/secretscan.sarif")
+        fi
+        read -r -a extra <<< "$INPUT_ARGS"
+        cmd+=("${extra[@]}")
+        "${cmd[@]}"
+
+    - name: Upload SARIF
+      if: always() && inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ runner.temp }}/secretscan.sarif

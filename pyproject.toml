@@ -4,12 +4,32 @@ build-backend = "hatchling.build"
 
 [project]
 name = "secretscan"
-version = "0.1.0"
+dynamic = ["version"]  # single source: __version__ in src/secretscan/__init__.py
 description = "Find leaked secrets in files, staged changes and git history"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Harshith Ashok" }]
+keywords = ["secrets", "security", "git", "scanner", "pre-commit", "sarif"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/harshith-ashok/secretscan"
+Issues = "https://github.com/harshith-ashok/secretscan/issues"
+Source = "https://github.com/harshith-ashok/secretscan"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov", "hypothesis", "ruff", "mypy", "build"]
@@ -17,8 +37,14 @@ dev = ["pytest>=8", "pytest-cov", "hypothesis", "ruff", "mypy", "build"]
 [project.scripts]
 secretscan = "secretscan.cli:main"
 
+[tool.hatch.version]
+path = "src/secretscan/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/secretscan"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "LICENSE", "README.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
