@@ -7,6 +7,7 @@
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
+  <img alt="XERJ Corpus Hub contributor" src="https://hub.xerj.org/contributors/harshith-ashok/badge.svg">
 </p>
 
 Git never forgets: deleting a secret in a later commit leaves it in history, where anyone who can clone the repo can read it. `secretscan` checks every place a secret can live and tells you what to do about each one.
@@ -81,12 +82,12 @@ secretscan install-hook .                  # block commits that add secrets
 
 ### Reading a finding
 
-| Field          | What it tells you                                                                   |
-| -------------- | ----------------------------------------------------------------------------------- |
-| **cite**       | `path:line`, plus the commit for history findings                                   |
+| Field          | What it tells you                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **cite**       | `path:line`, plus the commit for history findings                                                                                                                     |
 | **confidence** | how likely it is real: `high` for rigid vendor formats, `medium` for looser syntax (JWTs, `.env`, URL passwords, auth headers), `low` for generic and entropy matches |
-| **match**      | the source line with every secret masked (first 4 and last 2 characters shown)      |
-| **suggestion** | what to do next, specific to the rule                                               |
+| **match**      | the source line with every secret masked (first 4 and last 2 characters shown)                                                                                        |
+| **suggestion** | what to do next, specific to the rule                                                                                                                                 |
 
 Confidence drops one level for files under `tests/`, `docs/`, `examples/` and similar, where fake credentials are common. JSON and SARIF carry the same fields.
 
@@ -170,37 +171,37 @@ for f in scan_chunks(iter_history(Path("."))):
 
 29 built-in rules, most specific first. A secret is reported once, by the first rule that matches it.
 
-| Rule                         | Detects                                                    | Confidence |
-| ---------------------------- | ---------------------------------------------------------- | ---------- |
-| `aws-access-key-id`          | AWS access key ID                                          | high       |
-| `github-token`               | GitHub token                                               | high       |
-| `github-fine-grained-token`  | GitHub fine-grained personal access token                  | high       |
-| `gitlab-token`               | GitLab personal access token                               | high       |
-| `google-api-key`             | Google API key                                             | high       |
-| `google-oauth-client-secret` | Google OAuth client secret                                 | high       |
-| `azure-storage-key`          | Azure storage account key                                  | high       |
-| `digitalocean-token`         | DigitalOcean token                                         | high       |
-| `stripe-live-key`            | Stripe live secret or restricted key                       | high       |
-| `slack-token`                | Slack token                                                | high       |
-| `slack-webhook`              | Slack incoming webhook URL                                 | high       |
-| `discord-webhook`            | Discord webhook URL                                        | high       |
-| `telegram-bot-token`         | Telegram bot token                                         | high       |
-| `sendgrid-key`               | SendGrid API key                                           | high       |
-| `twilio-api-key`             | Twilio API key SID                                         | high       |
-| `mailgun-key`                | Mailgun API key                                            | high       |
-| `shopify-token`              | Shopify access token                                       | high       |
-| `npm-token`                  | npm access token                                           | high       |
-| `pypi-token`                 | PyPI API token                                             | high       |
-| `anthropic-key`              | Anthropic API key                                          | high       |
-| `openai-key`                 | OpenAI API key                                             | high       |
-| `huggingface-token`          | Hugging Face access token                                  | high       |
+| Rule                         | Detects                                                   | Confidence |
+| ---------------------------- | --------------------------------------------------------- | ---------- |
+| `aws-access-key-id`          | AWS access key ID                                         | high       |
+| `github-token`               | GitHub token                                              | high       |
+| `github-fine-grained-token`  | GitHub fine-grained personal access token                 | high       |
+| `gitlab-token`               | GitLab personal access token                              | high       |
+| `google-api-key`             | Google API key                                            | high       |
+| `google-oauth-client-secret` | Google OAuth client secret                                | high       |
+| `azure-storage-key`          | Azure storage account key                                 | high       |
+| `digitalocean-token`         | DigitalOcean token                                        | high       |
+| `stripe-live-key`            | Stripe live secret or restricted key                      | high       |
+| `slack-token`                | Slack token                                               | high       |
+| `slack-webhook`              | Slack incoming webhook URL                                | high       |
+| `discord-webhook`            | Discord webhook URL                                       | high       |
+| `telegram-bot-token`         | Telegram bot token                                        | high       |
+| `sendgrid-key`               | SendGrid API key                                          | high       |
+| `twilio-api-key`             | Twilio API key SID                                        | high       |
+| `mailgun-key`                | Mailgun API key                                           | high       |
+| `shopify-token`              | Shopify access token                                      | high       |
+| `npm-token`                  | npm access token                                          | high       |
+| `pypi-token`                 | PyPI API token                                            | high       |
+| `anthropic-key`              | Anthropic API key                                         | high       |
+| `openai-key`                 | OpenAI API key                                            | high       |
+| `huggingface-token`          | Hugging Face access token                                 | high       |
 | `private-key`                | Private key block (RSA, EC, DSA, OpenSSH, PGP, encrypted) | high       |
-| `jwt`                        | JSON Web Token                                             | medium     |
-| `aws-secret-access-key`      | AWS secret access key                                      | medium     |
-| `url-credentials`            | Password embedded in a URL                                 | medium     |
-| `auth-header`                | Hard-coded `Authorization` header token                    | medium     |
-| `env-secret`                 | Unquoted `NAME=value` secret, as in `.env` files           | medium     |
-| `generic-credential`         | Hard-coded `password` / `token` / `api_key` assignment     | low        |
+| `jwt`                        | JSON Web Token                                            | medium     |
+| `aws-secret-access-key`      | AWS secret access key                                     | medium     |
+| `url-credentials`            | Password embedded in a URL                                | medium     |
+| `auth-header`                | Hard-coded `Authorization` header token                   | medium     |
+| `env-secret`                 | Unquoted `NAME=value` secret, as in `.env` files          | medium     |
+| `generic-credential`         | Hard-coded `password` / `token` / `api_key` assignment    | low        |
 
 To cut false positives, placeholders (`example`, `changeme`, `<...>`) are skipped, and the generic rule ignores stored password hashes (`sha1$...`, bcrypt, argon2), code and template strings, and plain words.
 
